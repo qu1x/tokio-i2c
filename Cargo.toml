@@ -1,0 +1,28 @@
+[package]
+name = "tokio-i2c"
+version = "0.1.0"
+authors = ["Rouven Spreckels <n3vu0r@qu1x.org>"]
+description = "I²C API for Tokio"
+documentation = "https://docs.rs/tokio-i2c"
+homepage = "https://qu1x.org/tokio-i2c"
+repository = "https://github.com/qu1x/tokio-i2c"
+readme = "README.md"
+keywords = ["tokio", "futures", "i2c", "i2cdev", "async"]
+categories = ["asynchronous", "api-bindings", "hardware-support"]
+license = "Fair"
+include = [
+	"src/**/*.rs",
+	"Cargo.toml",
+	"README.md",
+	"RELEASES.md",
+]
+
+[badges]
+travis-ci = { repository = "qu1x/tokio-i2c" }
+
+[dependencies]
+tokio = "0.1"
+tokio-threadpool = "0.1"
+i2c-linux-sys = "0.2"
+bitflags = "1"
+smallvec = "0.6"
