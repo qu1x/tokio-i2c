@@ -105,13 +105,13 @@ bitflags! {
 	#[derive(Default)]
 	pub struct MessageFlags: u16 {
 		const READ = I2C_M_RD;
+		const EXACT = EXACT;
 		const RECEIVE_LEN = I2C_M_RECV_LEN;
 		const NACK = I2C_M_NO_RD_ACK;
 		const IGNORE_NACK = I2C_M_IGNORE_NAK;
 		const REVERSE_RW = I2C_M_REV_DIR_ADDR;
 		const NO_START = I2C_M_NOSTART;
 		const STOP = I2C_M_STOP;
-		const EXACT = EXACT;
 	}
 }
 
@@ -119,7 +119,8 @@ const EXACT: u16 = 0x0100;
 
 impl From<Functionality> for MessageFlags {
 	fn from(functionality: Functionality) -> MessageFlags {
-		let mut flags = MessageFlags::EXACT;
+		let mut flags = MessageFlags::READ | MessageFlags::EXACT
+			| MessageFlags::RECEIVE_LEN;
 		if functionality.contains(Functionality::PROTOCOL_MANGLING) {
 			flags.insert(MessageFlags::NACK);
 			flags.insert(MessageFlags::IGNORE_NACK);
