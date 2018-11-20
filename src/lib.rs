@@ -207,6 +207,16 @@ impl<F: AsRawFd> Master<F> {
 		assert!(messages.len() <= I2C_RDWR_IOCTL_MAX_MSGS);
 		TransferFuture { item: Some((messages, self)) }
 	}
+	pub fn transfers<A, M, T>(self, transfers: SmallVec<T>)
+	-> impl Future<Item = (SmallVec<T>, Self), Error = io::Error> where
+		A: Array<Item = u8>,
+		M: Array<Item = Message<A>>,
+		T: Array<Item = SmallVec<M>>,
+	{
+		transfers.iter().for_each(|messages|
+			assert!(messages.len() <= I2C_RDWR_IOCTL_MAX_MSGS));
+		TransfersFuture { item: Some((transfers, self)) }
+	}
 	pub fn read_block_data<A>(self, command: u8,
 		data: SmallVec<A>, exact: bool)
 	-> impl Future<Item = (SmallVec<A>, Self), Error = io::Error> where
@@ -426,6 +436,36 @@ impl<F: AsRawFd, A, M> Future for TransferFuture<F, A, M> where
 			Ok(Ready((messages, master)))
 		} else {
 			self.item = Some((messages, master));
+			Ok(NotReady)
+		}
+	}
+}
+
+struct TransfersFuture<F: AsRawFd, A, M, T> where
+	A: Array<Item = u8>,
+	M: Array<Item = Message<A>>,
+	T: Array<Item = SmallVec<M>>,
+{
+	item: Option<(SmallVec<T>, Master<F>)>,
+}
+
+impl<F: AsRawFd, A, M, T> Future for TransfersFuture<F, A, M, T> where
+	A: Array<Item = u8>,
+	M: Array<Item = Message<A>>,
+	T: Array<Item = SmallVec<M>>,
+{
+	type Item = (SmallVec<T>, Master<F>);
+	type Error = io::Error;
+
+	fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+		let (mut transfers, master) = self.item.take().expect(ERR_RESOLVED);
+		if let Ready(()) = blocking_io(||
+			transfers.iter_mut().map(|mut messages|
+				i2c_transfer(master.as_raw_fd(), &mut messages)).collect()
+		)? {
+			Ok(Ready((transfers, master)))
+		} else {
+			self.item = Some((transfers, master));
 			Ok(NotReady)
 		}
 	}
