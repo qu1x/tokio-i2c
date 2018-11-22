@@ -275,42 +275,111 @@ impl<F> Master<F> where
 impl<F> Master<F> where
 	F: AsRawFd + Send + 'static,
 {
+	/// Enables/Disables Packet Error Checking (PEC).
+	///
+	/// A Packet Error Code (PEC) is appended at the end of each message
+	/// transfer by the device that supplied the last data byte, that excludes
+	/// `smbus_write_bit()`. An invalid PEC byte will not be acknowledged and
+	/// result in an `io::Error`.
+	///
+	/// Available since version 1.1 of the SMBus specification.
 	pub fn smbus_set_pec(self, pec: bool)
 	-> impl Future<Item = Self, Error = io::Error> + Send + 'static {
 		SmbusSetPecFuture { item: Some(self), pec }
 	}
-	pub fn smbus_write_quick(self, read_bit: bool)
+	/// Writes a command/data `bit` at the place of the direction bit.
+	///
+	/// No PEC byte will be appended, see `smbus_set_pec()`.
+	///
+	/// ```text
+	/// S address bit [A] P
+	/// ```
+	pub fn smbus_write_bit(self, bit: bool)
 	-> impl Future<Item = Self, Error = io::Error> + Send + 'static {
-		SmbusWriteQuickFuture { item: Some(self), read_bit }
+		SmbusWriteBitFuture { item: Some(self), bit }
 	}
+	/// Reads a command/data byte.
+	///
+	/// ```text
+	/// S address R [A] [byte] N P
+	/// ```
 	pub fn smbus_read_byte(self)
 	-> impl Future<Item = (u8, Self), Error = io::Error> + Send + 'static {
 		SmbusReadByteFuture { item: Some(self) }
 	}
+	/// Writes a command/data byte.
+	///
+	/// ```text
+	/// S address W [A] byte [A] P
+	/// ```
 	pub fn smbus_write_byte(self, byte: u8)
 	-> impl Future<Item = Self, Error = io::Error> + Send + 'static {
 		SmbusWriteByteFuture { item: Some(self), byte }
 	}
+	/// Writes the `command` byte and reads a data byte.
+	///
+	/// ```text
+	/// S address W [A] command  [A]
+	/// S address R [A]   [data]  N  P
+	/// ```
 	pub fn smbus_read_byte_data<A>(self, command: u8)
 	-> impl Future<Item = (u8, Self), Error = io::Error> + Send + 'static {
 		SmbusReadByteDataFuture { item: Some(self), command }
 	}
-	pub fn smbus_write_byte_data(self, command: u8, byte: u8)
+	/// Writes the `command` byte and the `data` byte.
+	///
+	/// ```text
+	/// S address W [A] command [A] [data] [A] P
+	/// ```
+	pub fn smbus_write_byte_data(self, command: u8, data: u8)
 	-> impl Future<Item = Self, Error = io::Error> + Send + 'static {
-		SmbusWriteByteDataFuture { item: Some(self), command, byte }
+		SmbusWriteByteDataFuture { item: Some(self), command, data }
 	}
+	/// Writes the `command` byte and reads a data word.
+	///
+	/// A data word comprises a low and a high data byte in the order mentioned.
+	///
+	/// ```text
+	/// S address W [A]   command  [A]
+	/// S address R [A] [data_low]  A  [data_high] N P
+	/// ```
 	pub fn smbus_read_word_data(self, command: u8)
 	-> impl Future<Item = (u16, Self), Error = io::Error> + Send + 'static {
 		SmbusReadWordDataFuture { item: Some(self), command }
 	}
-	pub fn smbus_write_word_data(self, command: u8, word: u16)
+	/// Writes the `command` byte and the `data` word.
+	///
+	/// A data word comprises a low and a high data byte in the order mentioned.
+	///
+	/// ```text
+	/// S address W [A] command [A] data_low [A] data_high [A] P
+	/// ```
+	pub fn smbus_write_word_data(self, command: u8, data: u16)
 	-> impl Future<Item = Self, Error = io::Error> + Send + 'static {
-		SmbusWriteWordDataFuture { item: Some(self), command, word }
+		SmbusWriteWordDataFuture { item: Some(self), command, data }
 	}
-	pub fn smbus_process_call(self, command: u8, word: u16)
+	/// Writes the `command` byte and the `data` word and then reads a data word
+	/// in return.
+	///
+	/// A data word comprises a low and a high data byte in the order mentioned.
+	///
+	/// ```text
+	/// S address W [A] command [A]  data_low  [A]  data_high  [A]
+	/// S address R [A]             [data_low]  A  [data_high]  N  P
+	/// ```
+	pub fn smbus_process_call(self, command: u8, data: u16)
 	-> impl Future<Item = (u16, Self), Error = io::Error> + Send + 'static {
-		SmbusProcessCallFuture { item: Some(self), command, word }
+		SmbusProcessCallFuture { item: Some(self), command, data }
 	}
+	/// Writes the `command` byte and reads a length byte followed by a `data`
+	/// block of that length.
+	///
+	/// The data block length ranges from 1 to 32 bytes.
+	///
+	/// ```text
+	/// S address W [A] command  [A]
+	/// S address R [A] [length]  A  [data#1] A ... [data#length] N P
+	/// ```
 	pub fn smbus_read_block_data<A>(self, command: u8,
 		data: SmallVec<A>, exact: bool)
 	-> impl Future<Item = (SmallVec<A>, Self), Error = io::Error>
@@ -319,12 +388,34 @@ impl<F> Master<F> where
 	{
 		SmbusReadBlockDataFuture { item: Some((data, self)), command, exact }
 	}
+	/// Writes the `command` byte and a length byte followed by the `data` block
+	/// of that length.
+	///
+	/// The data block length ranges from 1 to 32 bytes.
+	///
+	/// ```text
+	/// S address W [A] command [A]
+	///                  length [A] data#1 [A] ... data#length [A] P
+	/// ```
 	pub fn smbus_write_block_data<A>(self, command: u8, data: SmallVec<A>)
 	-> impl Future<Item = Self, Error = io::Error> + Send + 'static where
 		A: Array<Item = u8> + Send + 'static,
 	{
 		SmbusWriteBlockDataFuture { item: Some((data, self)), command }
 	}
+	/// Writes the `command` byte and a length byte followed by the `write_data`
+	/// block of that length and then reads a length byte followed by a
+	/// `read_data` block of that length in return.
+	///
+	/// The data block length ranges from 1 to 32 bytes.
+	///
+	/// Available since version 2.0 of the SMBus specification.
+	///
+	/// ```text
+	/// S address W [A] command  [A]
+	///                  length  [A]  data#1  [A] ...  data#length  [A]
+	/// S address R [A] [length]  A  [data#1]  A  ... [data#length]  N  P
+	/// ```
 	pub fn smbus_block_process_call<A, B>(self, command: u8,
 		write_data: SmallVec<A>, read_data: SmallVec<B>, exact: bool)
 	-> impl Future<Item = (SmallVec<B>, Self), Error = io::Error>
@@ -764,14 +855,14 @@ impl<F> Future for SmbusSetPecFuture<F> where
 	}
 }
 
-struct SmbusWriteQuickFuture<F> where
+struct SmbusWriteBitFuture<F> where
 	F: AsRawFd + Send + 'static,
 {
 	item: Option<Master<F>>,
-	read_bit: bool,
+	bit: bool,
 }
 
-impl<F> Future for SmbusWriteQuickFuture<F> where
+impl<F> Future for SmbusWriteBitFuture<F> where
 	F: AsRawFd + Send + 'static,
 {
 	type Item = Master<F>;
@@ -780,7 +871,7 @@ impl<F> Future for SmbusWriteQuickFuture<F> where
 	fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
 		let master = self.item.take().expect(ERR_RESOLVED);
 		if let Ready(()) = blocking_io(||
-			i2c_smbus_write_quick(master.as_raw_fd(), match self.read_bit {
+			i2c_smbus_write_quick(master.as_raw_fd(), match self.bit {
 				true => i2c_linux_sys::SmbusReadWrite::Read,
 				false => i2c_linux_sys::SmbusReadWrite::Write,
 			})
@@ -859,10 +950,10 @@ impl<F> Future for SmbusReadByteDataFuture<F> where
 
 	fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
 		let master = self.item.take().expect(ERR_RESOLVED);
-		if let Ready(byte) = blocking_io(||
+		if let Ready(data) = blocking_io(||
 			i2c_smbus_read_byte_data(master.as_raw_fd(), self.command)
 		)? {
-			Ok(Ready((byte, master)))
+			Ok(Ready((data, master)))
 		} else {
 			self.item = Some(master);
 			Ok(NotReady)
@@ -875,7 +966,7 @@ struct SmbusWriteByteDataFuture<F> where
 {
 	item: Option<Master<F>>,
 	command: u8,
-	byte: u8,
+	data: u8,
 }
 
 impl<F> Future for SmbusWriteByteDataFuture<F> where
@@ -888,7 +979,7 @@ impl<F> Future for SmbusWriteByteDataFuture<F> where
 		let master = self.item.take().expect(ERR_RESOLVED);
 		if let Ready(()) = blocking_io(||
 			i2c_smbus_write_byte_data(master.as_raw_fd(),
-				self.command, self.byte)
+				self.command, self.data)
 		)? {
 			Ok(Ready(master))
 		} else {
@@ -913,10 +1004,10 @@ impl<F> Future for SmbusReadWordDataFuture<F> where
 
 	fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
 		let master = self.item.take().expect(ERR_RESOLVED);
-		if let Ready(word) = blocking_io(||
+		if let Ready(data) = blocking_io(||
 			i2c_smbus_read_word_data(master.as_raw_fd(), self.command)
 		)? {
-			Ok(Ready((word, master)))
+			Ok(Ready((data, master)))
 		} else {
 			self.item = Some(master);
 			Ok(NotReady)
@@ -929,7 +1020,7 @@ struct SmbusWriteWordDataFuture<F> where
 {
 	item: Option<Master<F>>,
 	command: u8,
-	word: u16,
+	data: u16,
 }
 
 impl<F> Future for SmbusWriteWordDataFuture<F> where
@@ -942,7 +1033,7 @@ impl<F> Future for SmbusWriteWordDataFuture<F> where
 		let master = self.item.take().expect(ERR_RESOLVED);
 		if let Ready(()) = blocking_io(||
 			i2c_smbus_write_word_data(master.as_raw_fd(),
-				self.command, self.word)
+				self.command, self.data)
 		)? {
 			Ok(Ready(master))
 		} else {
@@ -957,7 +1048,7 @@ struct SmbusProcessCallFuture<F> where
 {
 	item: Option<Master<F>>,
 	command: u8,
-	word: u16,
+	data: u16,
 }
 
 impl<F> Future for SmbusProcessCallFuture<F> where
@@ -968,10 +1059,10 @@ impl<F> Future for SmbusProcessCallFuture<F> where
 
 	fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
 		let master = self.item.take().expect(ERR_RESOLVED);
-		if let Ready(word) = blocking_io(||
-			i2c_smbus_process_call(master.as_raw_fd(), self.command, self.word)
+		if let Ready(data) = blocking_io(||
+			i2c_smbus_process_call(master.as_raw_fd(), self.command, self.data)
 		)? {
-			Ok(Ready((word, master)))
+			Ok(Ready((data, master)))
 		} else {
 			self.item = Some(master);
 			Ok(NotReady)
