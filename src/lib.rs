@@ -6,7 +6,26 @@
 //
 // DISCLAIMER: THE WORKS ARE WITHOUT WARRANTY.
 
-//! I²C API for Tokio
+//! Asynchronous I²C API adaptation for Tokio
+//!
+//! This module contains utility methods and adapter types for the operating
+//! system's I²C API, for use within (and only within) a Tokio runtime.
+//! Currently, only the [Linux I²C API] is supported.
+//!
+//! Tasks run by *worker* threads should not block, as this could delay
+//! servicing reactor events. Most operating system's I²C APIs are blocking,
+//! however. This module offers adapters which use a `blocking` annotation to
+//! inform the runtime that a blocking operation is required. When necessary,
+//! this allows the runtime to convert the current thread from a *worker* to a
+//! *backup* thread, where blocking is acceptable. This is the same approach as
+//! for the `tokio-fs` module.
+//!
+//! When the overhead of this asynchronization approach for many small I²C
+//! messages is a concern, consider to pack multiple I²C messages into a single
+//! I²C transfer or even to pack multiple I²C transfers into a single `Future`
+//! when appropriate, see `i2c_transfer` and `i2c_transfers`.
+//!
+//! [Linux I²C API]: https://www.kernel.org/doc/Documentation/i2c/dev-interface
 
 // TODO #![deny(missing_docs)]
 
@@ -27,6 +46,17 @@ use std::path::Path;
 use std::fs::{File, OpenOptions};
 use std::time::Duration;
 
+/// A "prelude" for users of the `tokio-i2c` crate.
+///
+/// This prelude is similar to the standard library's prelude in that you'll
+/// almost always want to import its entire contents, but unlike the standard
+/// library's prelude you'll have to do so manually:
+///
+/// ```
+/// use tokio_i2c::prelude::*;
+/// ```
+///
+/// The prelude may grow over time as additional items see ubiquitous use.
 pub mod prelude {
 	pub use tokio::prelude::*;
 	pub use super::{
