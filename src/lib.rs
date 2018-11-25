@@ -684,7 +684,7 @@ impl<F, A> Future for ReadBlockDataFuture<F, A> where
 				}
 			} else {
 				data.truncate(I2C_SMBUS_BLOCK_MAX);
-				i2c_smbus_read_block_data(master.as_raw_fd(),
+				i2c_smbus_read_i2c_block_data(master.as_raw_fd(),
 				self.command, &mut data).and_then(|len|
 					if self.exact && len != data.len() {
 						Err(UnexpectedEof.into())
@@ -760,7 +760,7 @@ impl<F, A> Future for WriteBlockDataFuture<F, A> where
 						"No slave address set"))
 				}
 			} else {
-				i2c_smbus_write_block_data(master.as_raw_fd(),
+				i2c_smbus_write_i2c_block_data(master.as_raw_fd(),
 					self.command, &data)
 			}
 		})? {
